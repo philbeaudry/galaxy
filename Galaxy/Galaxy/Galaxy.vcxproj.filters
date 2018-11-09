@@ -23,7 +23,7 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <CudaCompile Include="Main.cpp">
+    <CudaCompile Include="Main.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>
   </ItemGroup>

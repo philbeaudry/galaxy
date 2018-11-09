@@ -1,5 +1,8 @@
 #include <iostream> 
 #include <cmath>
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <device_launch_parameters.h>
 
 using namespace std;
 
@@ -40,6 +43,7 @@ struct Particle {
 struct Node {
 	Particle particle;
 
+	__host__ __device__
 	Node(Particle _particle) {
 		particle = _particle;
 	}
@@ -90,6 +94,7 @@ public:
 	}
 	~Quad() {}
 
+	__host__ __device__
 	void insert(Node *_node) {
 		if (_node == NULL) {
 			return;
@@ -160,6 +165,7 @@ public:
 			_particle.y <= botRight.y);
 	}
 
+	__host__ __device__
 	void calculateMass() {
 		if (numberOfParticles == 1) {
 			centerOfMassX = node->particle.x;
@@ -198,6 +204,7 @@ public:
 
 	const double G = 6.67 * pow(10, -11);
 
+	__host__ __device__
 	double CalculateForce(Particle _particle) {
 		double r = 0;
 		double d = 0;
@@ -239,6 +246,7 @@ public:
 		return force;
 	}
 
+	__host__ __device__
 	int newPositionInX(Particle _particle, double force) {
 
 		_particle.velocityX = _particle.velocityX * force;
@@ -246,6 +254,7 @@ public:
 		return (_particle.velocityX + _particle.x) * 30;
 	}
 
+	__host__ __device__
 	int newPositionInY(Particle _particle, double force) {
 
 		_particle.velocityY = _particle.velocityY * force;

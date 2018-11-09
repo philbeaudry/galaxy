@@ -119,7 +119,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <CudaCompile Include="Main.cpp" />
+    <CudaCompile Include="Main.cu" />
     <ClCompile Include="Quad.cpp" />
   </ItemGroup>
   <ItemGroup>

@@ -11,10 +11,6 @@ http://beltoforion.de/article.php?a=barnes-hut-galaxy-simulator
 #include "tbb/task_group.h"
 #include <math.h>
 
-#include <cuda.h>
-#include <cuda_runtime.h>
-#include <device_launch_parameters.h>
-
 using namespace std;
 using namespace tbb;
 
@@ -61,18 +57,16 @@ int main(void)
 	Particle *galaxy1, *galaxy2;
 
 	//Allocate Unified Memory, acccessible from CPU or GPU
-	cudaMallocManaged(&galaxy1, numberOfParticles*sizeof(Particle));
-	cudaMallocManaged(&galaxy2, numberOfParticles * sizeof(Particle));
+	cudaMalloc((void**)&galaxy1, numberOfParticles*sizeof(Particle));
+	cudaMalloc((void**)&galaxy2, numberOfParticles * sizeof(Particle));
 
 	//Mark the extremity of the the board to divide
 	for (int i = 0; i < numberOfParticles; i++) {
-		Particle *p = new Particle(rand() % 100 + 200, rand() % 100 + 200, rand() % 1000);
-		galaxy1[i] = *p;
+		galaxy1[i] = Particle(rand() % 100 + 200, rand() % 100 + 200, rand() % 1000);
 	}
 
 	for (int i = 0; i < numberOfParticles; i++) {
-		Particle *p = new Particle(rand() % 200 + 700, rand() % 200 + 700, rand() % 1000);
-		galaxy2[i] = *p;
+		galaxy2[i] = Particle(rand() % 200 + 700, rand() % 200 + 700, rand() % 1000);
 	}
 
 	// use Barnes-hut to find the forces and etc.
@@ -126,7 +120,7 @@ int main(void)
 
 		//Run kernel on the GPU, 256 threads should be reasonable size
 		calculation<<<(count / 256) + 1, 256>>>(quadtree1,galaxy1);
-		calculation<<<(count / 256) + 1, 256>> >(quadtre2, galaxy2);
+		calculation<<<(count / 256) + 1, 256>> >(quadtree2, galaxy2);
 
 		cudaDeviceSynchronize();
 		
