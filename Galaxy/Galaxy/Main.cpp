@@ -9,6 +9,11 @@ http://beltoforion.de/article.php?a=barnes-hut-galaxy-simulator
 #include <time.h>
 #include "tbb/tbb.h"
 #include "tbb/task_group.h"
+#include <math.h>
+
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <device_launch_parameters.h>
 
 using namespace std;
 using namespace tbb;
@@ -16,33 +21,48 @@ using namespace tbb;
 #define SCREEN_WIDTH 1000
 #define SCREEN_HEIGHT 1000
 
+
 // Set number of particles
 const int numberOfParticles = 150;
 
+//Kernel function to add calculate the mass and force from all the particle in the array to the quad
+__global__
 void calculation(Quad *quadtree, Particle *galaxy) {
+
 	quadtree->calculateMass();
-	//Parallel_for data parallism
-	parallel_for(0, numberOfParticles, [&](size_t i) {
+
+	//index of the current thread within its block
+	int index = threadIdx.x;
+	//number of threads in the block
+	int stride = blockDim.x;	
+	for (int i = index; i < numberOfParticles; i+= stride) {
 		galaxy[i].force = quadtree->CalculateForce(galaxy[i]);
-		//galaxy[i].x = quadtree->newPositionInX(galaxy[i], galaxy[i].force);
-		//galaxy[i].y = quadtree->newPositionInX(galaxy[i], galaxy[i].force);
-	});
+		galaxy[i].x = quadtree->newPositionInX(galaxy[i], galaxy[i].force);
+		galaxy[i].y = quadtree->newPositionInX(galaxy[i], galaxy[i].force);
+	}	
 }
 
+//Kernel function to insert particles in quad
+__global__
 void insert(Quad *quadtree, Particle *galaxy) {
-	//Parallel_for data parallism
-	parallel_for(0, numberOfParticles, [&](size_t i) {
+	int index = threadIdx.x;
+	int stride = blockDim.x;
+
+	for (int i = index; i < numberOfParticles; i += stride) {
 		Node *node = new Node(galaxy[i]);
 		quadtree->insert(node);
-	});
+	}
 }
 
 int main(void)
 {
 
 	// Create the quadtree and randomly distribute the particles in 2d
-	Particle *galaxy1 = new Particle[numberOfParticles];
-	Particle *galaxy2 = new Particle[numberOfParticles];
+	Particle *galaxy1, *galaxy2;
+
+	//Allocate Unified Memory, acccessible from CPU or GPU
+	cudaMallocManaged(&galaxy1, numberOfParticles*sizeof(Particle));
+	cudaMallocManaged(&galaxy2, numberOfParticles * sizeof(Particle));
 
 	//Mark the extremity of the the board to divide
 	for (int i = 0; i < numberOfParticles; i++) {
@@ -88,29 +108,60 @@ int main(void)
 		// Creet a pointVertex to show the particle in the openGL
 		GLfloat *pointVertex = new GLfloat[numberOfParticles * 4];
 
-		Quad *quadtree1 = new Quad(Particle(0, 0, 0), Particle(2000, 2000, 0));
-		Quad *quadtree2 = new Quad(Particle(0, 0, 0), Particle(2000, 2000, 0));
+		Quad *quadtree1, *quadtree2;
 
-		//Calculations threads (task parallism)
-		task_group insertGroup;
-		insertGroup.run([&] { insert(quadtree1, galaxy1); }); // spawn a task
-		insertGroup.run([&] { insert(quadtree2, galaxy2); }); // spawn another task
-		insertGroup.wait(); // wait for both tasks to complete
+		cudaMallocManaged(&quadtree1, sizeof(Quad));
+		cudaMallocManaged(&quadtree2, sizeof(Quad));
 
-							//Changing possitions, display threads ( task parallism)
-		task_group calculatioGroup;
-		calculatioGroup.run([&] { calculation(quadtree1, galaxy1); }); // spawn a task
-		calculatioGroup.run([&] { calculation(quadtree2, galaxy2); }); // spawn another task
-		calculatioGroup.wait(); // wait for both tasks to complete			
+		quadtree1 = new Quad(Particle(0, 0, 0), Particle(2000, 2000, 0));
+		quadtree2 = new Quad(Particle(0, 0, 0), Particle(2000, 2000, 0));
 
-								//put the particle in the vertix array
+		//Run kernel on the GPU, 256 threads should be reasonable size
+		int count = 200;
+	
+		insert<<<(count/256)+1, 256>>>(quadtree1, galaxy1);
+		insert<<<(count / 256) + 1, 256>>>(quadtree2, galaxy2);
+
+		cudaDeviceSynchronize();
+
+		//Run kernel on the GPU, 256 threads should be reasonable size
+		calculation<<<(count / 256) + 1, 256>>>(quadtree1,galaxy1);
+		calculation<<<(count / 256) + 1, 256>> >(quadtre2, galaxy2);
+
+		cudaDeviceSynchronize();
+		
+		//put the particle in the vertix array
 		int j = 0;
 		for (int i = 0; i < numberOfParticles; i++) {
+			if (rand() % 2 == 1) {
+				galaxy1[i].x += 4;
+			}
+			else {
+				galaxy1[i].x -= 4;
+			}
+			if (rand() % 2 == 1) {
+				galaxy1[i].y += 4;
+			}
+			else {
+				galaxy1[i].x -= 4;
+			}
 			pointVertex[j] = galaxy1[i].x;
 			pointVertex[j + 1] = galaxy1[i].y;
 			j += 2;
 		}
 		for (int i = 0; i < numberOfParticles; i++) {
+			if (rand() % 2 == 1) {
+				galaxy2[i].x += 4;
+			}
+			else {
+				galaxy2[i].x -= 4;
+			}
+			if (rand() % 2 == 1) {
+				galaxy2[i].y += 4;
+			}
+			else {
+				galaxy2[i].x -= 4;
+			}
 			pointVertex[j] = galaxy2[i].x;
 			pointVertex[j + 1] = galaxy2[i].y;
 			j += 2;
@@ -132,11 +183,16 @@ int main(void)
 		glfwPollEvents();
 
 		delete[] pointVertex;
-		delete quadtree1;
-		delete quadtree2;
+		//free Memory
+		cudaFree(quadtree1);
+		cudaFree(quadtree2);
 	}
 
 	glfwTerminate();
+
+	//free Memory
+	cudaFree(galaxy1);
+	cudaFree(galaxy2);
 
 	return 0;
 }
